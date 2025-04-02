@@ -18,6 +18,5 @@ class Group(Base):
     title = Column(String, nullable=False)
     creator_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     
-    # Используем строковые ссылки, чтобы избежать циклического импорта
     creator = relationship("User", backref="created_groups")
     participants = relationship("User", secondary=group_users, backref="groups")

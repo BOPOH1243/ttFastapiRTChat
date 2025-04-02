@@ -14,3 +14,9 @@ async def create_chat(db: AsyncSession, chat: ChatBase) -> Chat:
 async def get_chat(db: AsyncSession, chat_id: int) -> Chat | None:
     result = await db.execute(select(Chat).filter(Chat.id == chat_id))
     return result.scalars().first()
+
+# Функция-заглушка для получения чатов пользователя.
+# В реальном проекте необходимо реализовать связь между пользователем и чатами.
+async def get_user_chats(db: AsyncSession, user_id: int) -> list[Chat]:
+    result = await db.execute(select(Chat))
+    return result.scalars().all()

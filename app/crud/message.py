@@ -7,7 +7,6 @@ from app.models.message import Message
 from app.schemas.message import MessageCreate
 
 async def create_message(db: AsyncSession, message: MessageCreate) -> Message | None:
-    # Генерируем уникальный ID для предотвращения дублирования
     message_id = str(uuid.uuid4())
     db_message = Message(id=message_id, chat_id=message.chat_id, sender_id=message.sender_id, text=message.text)
     db.add(db_message)
@@ -17,7 +16,6 @@ async def create_message(db: AsyncSession, message: MessageCreate) -> Message | 
         return db_message
     except IntegrityError:
         await db.rollback()
-        # Обработка дублирования сообщения
         return None
 
 async def get_messages(db: AsyncSession, chat_id: int, limit: int = 50, offset: int = 0) -> list[Message]:

@@ -1,10 +1,10 @@
 # File: app/api/history.py
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
 from app.core.database import get_db
 from app.crud.message import get_messages
 from app.schemas.message import MessageResponse
-from typing import List
 
 router = APIRouter()
 
