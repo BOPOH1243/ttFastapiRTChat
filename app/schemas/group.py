@@ -1,17 +1,21 @@
-# File: app/schemas/group.py
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 
 class GroupBase(BaseModel):
     title: str
     creator_id: int
 
 class GroupCreate(GroupBase):
-    participant_ids: List[int]
+    pass
 
-class GroupResponse(GroupBase):
+class Group(GroupBase):
     id: int
-    participant_ids: List[int]
-
+    
     class Config:
-        orm_mode = True
+        from_attributes = True
+
+class GroupWithParticipants(Group):
+    participants: List[int] = []
+    
+    class Config:
+        from_attributes = True

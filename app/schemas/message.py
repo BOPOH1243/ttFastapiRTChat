@@ -1,19 +1,19 @@
-# File: app/schemas/message.py
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from datetime import datetime
+from typing import Optional
 
 class MessageBase(BaseModel):
+    text: str
     chat_id: int
     sender_id: int
-    text: str
 
 class MessageCreate(MessageBase):
     pass
 
-class MessageResponse(MessageBase):
-    id: str
+class Message(MessageBase):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: datetime
-    is_read: bool
-
+    is_read: bool = False
+    
     class Config:
-        orm_mode = True
+        from_attributes = True

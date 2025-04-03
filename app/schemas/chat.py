@@ -1,5 +1,5 @@
-# File: app/schemas/chat.py
 from pydantic import BaseModel
+from typing import Optional
 from enum import Enum
 
 class ChatType(str, Enum):
@@ -7,11 +7,14 @@ class ChatType(str, Enum):
     group = "group"
 
 class ChatBase(BaseModel):
-    title: str | None = None
+    title: Optional[str] = None
     type: ChatType
 
-class ChatResponse(ChatBase):
-    id: int
+class ChatCreate(ChatBase):
+    pass
 
+class Chat(ChatBase):
+    id: int
+    
     class Config:
-        orm_mode = True
+        from_attributes = True

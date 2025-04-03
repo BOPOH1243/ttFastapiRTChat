@@ -1,30 +1,59 @@
 # File: app/api/auth.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.schemas.user import UserCreate, UserResponse, UserLogin
-from app.crud.user import create_user, get_user_by_email
+from datetime import timedelta
+from app.schemas.user import UserCreate, User
+from app.schemas.auth import Token, LoginForm
+from app.crud.user import crud_user
 from app.core.database import get_db
-from app.core.security import create_access_token
-from passlib.context import CryptContext
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+from app.core.security import (
+    create_access_token,
+    get_password_hash,
+    verify_password
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-@router.post("/register", response_model=UserResponse)
-async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
-    db_user = await get_user_by_email(db, user.email)
-    if db_user:
-        raise HTTPException(status_code=400, detail="Email already registered")
-    # Хешируем пароль
-    user.password = pwd_context.hash(user.password)
-    new_user = await create_user(db, user)
-    return new_user
+@router.post("/register", response_model=User)
+async def register(
+    user_data: UserCreate,
+    db: AsyncSession = Depends(get_db)
+):
+    # Проверка существования пользователя
+    existing_user = await crud_user.get_by_email(db, user_data.email)
+    if existing_user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
+    # Хеширование пароля и создание пользователя
+    hashed_password = get_password_hash(user_data.password)
+    db_user = await crud_user.create(db, {
+        "email": user_data.email,
+        "name": user_data.name,
+        "hashed_password": hashed_password
+    })
+    
+    return db_user
 
-@router.post("/login")
-async def login(user: UserLogin, db: AsyncSession = Depends(get_db)):
-    db_user = await get_user_by_email(db, user.email)
-    if not db_user or not pwd_context.verify(user.password, db_user.hashed_password):
-        raise HTTPException(status_code=400, detail="Incorrect email or password")
-    token = create_access_token({"sub": str(db_user.id)})
-    return {"access_token": token, "token_type": "bearer"}
+@router.post("/login", response_model=Token)
+async def login(
+    login_data: LoginForm = Body(...),  # Используем схему и Body
+    db: AsyncSession = Depends(get_db)
+):
+    user = await crud_user.get_by_email(db, login_data.email)
+    
+    if not user or not verify_password(login_data.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password"
+        )
+    
+    access_token_expires = timedelta(minutes=30)
+    access_token = create_access_token(
+        data={"sub": str(user.id)},
+        expires_delta=access_token_expires
+    )
+    
+    return {"access_token": access_token, "token_type": "bearer"}
