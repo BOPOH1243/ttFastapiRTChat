@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from app.models.chat import Chat, chat_users
 from app.models.user import User
+from app.services.chat_service import manager
 
 class CRUDChat:
     """Класс для операций CRUD над чатами."""
@@ -58,6 +59,9 @@ class CRUDChat:
         await db.commit()
         # Принудительно обновляем объект, чтобы избежать ленивой загрузки
         await db.refresh(new_chat, attribute_names=["participants"])
+        
+        for participant in new_chat.participants:
+            await manager.send_notification(participant.id, message={"type":"new_chat"})
         return new_chat
 
     async def update(self, db: AsyncSession, db_chat: Chat, update_data: dict) -> Chat:

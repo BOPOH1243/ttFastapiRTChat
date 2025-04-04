@@ -1,21 +1,32 @@
-# File: app/api/websocket.py
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query
-from app.core.security import verify_token
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.services.chat_service import manager
 
-router = APIRouter(tags=["websocket"])
+router = APIRouter(tags=['websocket'])
 
-@router.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, token: str = Query(...)):
-    payload = verify_token(token)
-    if payload is None:
-        await websocket.close(code=1008)
-        return
-    user_id = int(payload.get("sub"))
-    await manager.connect(user_id, websocket)
+
+@router.websocket("/ws/notif")
+async def websocket_endpoint(websocket: WebSocket):
+    """
+    WebSocket-эндпоинт для уведомлений.
+    
+    Клиент должен подключаться по URL: /ws/notif?token=<jwt token>
+    После валидации токена соединение сохраняется, и далее сервер может отправлять уведомления
+    данному пользователю по его ID через функцию manager.send_notification().
+    
+    Цикл while поддерживает соединение активным.
+    """
+    user_id = None
     try:
+        # Извлекаем токен и валидируем его внутри менеджера.
+        user_id = await manager.connect(websocket)
         while True:
-            # Ожидаем сообщения (например, пинги) от клиента, но основная цель – уведомления с сервера
+            # Ожидаем входящих сообщений от клиента (например, ping)
             await websocket.receive_text()
     except WebSocketDisconnect:
-        manager.disconnect(user_id, websocket)
+        # Клиент отключился, удаляем соединение.
+        if user_id is not None:
+            manager.disconnect(user_id)
+    except Exception:
+        # При возникновении любой ошибки, также отключаем соединение.
+        if user_id is not None:
+            manager.disconnect(user_id)

@@ -3,7 +3,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.openapi.utils import get_openapi
 from fastapi.templating import Jinja2Templates
-from app.api import auth, chat, message
+from app.api import auth, chat, message, websocket
 from app.core.database import engine, Base
 
 app = FastAPI(title="Real-Time Chat API")
@@ -12,6 +12,7 @@ app = FastAPI(title="Real-Time Chat API")
 app.include_router(auth.router)
 app.include_router(chat.router)
 app.include_router(message.router)
+app.include_router(websocket.router)
 
 templates = Jinja2Templates(directory="app/templates")
 

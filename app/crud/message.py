@@ -2,7 +2,10 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional, List
 from app.models.message import Message as MessageModel
-
+from app.schemas.message import MessageResponse
+from app.services.chat_service import manager
+from app.crud.chat import crud_chat
+from fastapi.encoders import jsonable_encoder
 class CRUDMessage:
     """
     CRUD-операции для модели Message.
@@ -20,6 +23,17 @@ class CRUDMessage:
         db.add(new_message)
         await db.commit()
         await db.refresh(new_message)
+        payload = MessageResponse.from_orm(new_message)
+        payload_dict = jsonable_encoder(payload)
+        chat_message = await crud_chat.get(db=db, chat_id=new_message.chat_id)
+        for participant in chat_message.participants:
+            await manager.send_notification(
+                user_id=participant.id,
+                message={
+                    "type": "new_message",
+                    "payload": payload_dict
+                    }
+                )
         return new_message
 
     async def get(self, db: AsyncSession, message_id: str) -> Optional[MessageModel]:

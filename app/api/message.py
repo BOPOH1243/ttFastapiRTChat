@@ -5,7 +5,6 @@ from app.crud.message import crud_message
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User as UserModel
-
 router = APIRouter(prefix="/message", tags=["message"])
 
 @router.post("/", response_model=Message, status_code=status.HTTP_201_CREATED)

@@ -1,228 +1,88 @@
-<!-- File: app/static/index.html -->
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Test Chat App</title>
+  <title>WebSocket Notification Demo</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    .section { margin-bottom: 30px; border: 1px solid #ccc; padding: 20px; }
-    label { display: block; margin-top: 10px; }
-    input, textarea, select { width: 100%; padding: 8px; margin-top: 5px; }
-    button { margin-top: 10px; padding: 10px 20px; }
-    .hidden { display: none; }
-    #messages { border: 1px solid #aaa; padding: 10px; height: 200px; overflow-y: auto; }
+    body {
+      font-family: sans-serif;
+    }
+    #output {
+      border: 1px solid #ccc;
+      padding: 10px;
+      height: 300px;
+      overflow-y: auto;
+      background: #f9f9f9;
+    }
   </style>
 </head>
 <body>
-  <h1>Тестовый интерфейс для Chat API</h1>
-
-  <!-- Регистрация -->
-  <div class="section" id="register-section">
-    <h2>Регистрация</h2>
-    <label for="reg-name">Имя:</label>
-    <input type="text" id="reg-name">
-    <label for="reg-email">Email:</label>
-    <input type="email" id="reg-email">
-    <label for="reg-password">Пароль:</label>
-    <input type="password" id="reg-password">
-    <button id="register-btn">Зарегистрироваться</button>
-    <div id="register-result"></div>
-  </div>
-
-  <!-- Авторизация -->
-  <div class="section" id="login-section">
-    <h2>Авторизация</h2>
-    <label for="login-email">Email:</label>
-    <input type="email" id="login-email">
-    <label for="login-password">Пароль:</label>
-    <input type="password" id="login-password">
-    <button id="login-btn">Войти</button>
-    <div id="login-result"></div>
-  </div>
-
-  <!-- Панель авторизованного пользователя -->
-  <div class="section hidden" id="dashboard">
-    <h2>Панель пользователя</h2>
-    <p id="welcome-msg"></p>
-    
-    <!-- Создание чата -->
-    <div>
-      <h3>Создать чат</h3>
-      <label for="chat-title">Название чата (необязательно):</label>
-      <input type="text" id="chat-title">
-      <label for="chat-type">Тип чата:</label>
-      <select id="chat-type">
-        <option value="private">Личный</option>
-        <option value="group">Групповой</option>
-      </select>
-      <button id="create-chat-btn">Создать чат</button>
-      <div id="create-chat-result"></div>
-    </div>
-
-    <!-- Список чатов -->
-    <div>
-      <h3>Мои чаты</h3>
-      <button id="load-chats-btn">Обновить список чатов</button>
-      <select id="chat-list" size="5" style="width:100%; margin-top:10px;"></select>
-    </div>
-
-    <!-- Отправка сообщения в выбранный чат -->
-    <div>
-      <h3>Отправить сообщение</h3>
-      <label for="message-text">Текст сообщения:</label>
-      <textarea id="message-text" rows="3"></textarea>
-      <button id="send-message-btn">Отправить сообщение</button>
-      <div id="send-message-result"></div>
-    </div>
-
-    <!-- История сообщений -->
-    <div>
-      <h3>История сообщений</h3>
-      <button id="load-history-btn">Загрузить историю</button>
-      <div id="messages"></div>
-    </div>
-  </div>
-
+  <h1>WebSocket Notification Demo</h1>
+  <div id="output"></div>
+  
   <script>
-    const API_URL = "http://localhost:8000"; // URL вашего API
-    let accessToken = null;
-    let currentUserId = null;
-    
-    // Регистрация
-    document.getElementById("register-btn").addEventListener("click", async () => {
-      const name = document.getElementById("reg-name").value;
-      const email = document.getElementById("reg-email").value;
-      const password = document.getElementById("reg-password").value;
-      const response = await fetch(`${API_URL}/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password })
-      });
-      const result = await response.json();
-      document.getElementById("register-result").innerText = response.ok ? "Успешно зарегистрирован!" : JSON.stringify(result);
-    });
-
-    // Авторизация
-    document.getElementById("login-btn").addEventListener("click", async () => {
-      const email = document.getElementById("login-email").value;
-      const password = document.getElementById("login-password").value;
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password })
-      });
-      const result = await response.json();
-      if (response.ok) {
-        accessToken = result.access_token;
-        // Распаковываем user_id из токена (предполагается, что он хранится в поле sub)
-        const payload = JSON.parse(atob(accessToken.split('.')[1]));
-        currentUserId = payload.sub;
-        document.getElementById("login-result").innerText = "Успешная авторизация!";
-        document.getElementById("welcome-msg").innerText = `Добро пожаловать, пользователь ${currentUserId}!`;
-        document.getElementById("dashboard").classList.remove("hidden");
-        initWebSocket();
-      } else {
-        document.getElementById("login-result").innerText = JSON.stringify(result);
-      }
-    });
-
-    // Создание чата
-    document.getElementById("create-chat-btn").addEventListener("click", async () => {
-      const title = document.getElementById("chat-title").value;
-      const type = document.getElementById("chat-type").value;
-      const response = await fetch(`${API_URL}/chat/`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer " + accessToken
-        },
-        body: JSON.stringify({ title, type })
-      });
-      const result = await response.json();
-      document.getElementById("create-chat-result").innerText = response.ok ? "Чат создан" : JSON.stringify(result);
-      loadChats();
-    });
-
-    // Загрузка списка чатов
-    document.getElementById("load-chats-btn").addEventListener("click", loadChats);
-    async function loadChats() {
-      const response = await fetch(`${API_URL}/chat/my`, {
-        headers: { "Authorization": "Bearer " + accessToken }
-      });
-      const chats = await response.json();
-      const chatList = document.getElementById("chat-list");
-      chatList.innerHTML = "";
-      chats.forEach(chat => {
-        const option = document.createElement("option");
-        option.value = chat.id;
-        option.text = `ID: ${chat.id} | ${chat.title || "(без названия)"} [${chat.type}]`;
-        chatList.appendChild(option);
-      });
+    // Функция для добавления сообщения в блок вывода
+    function appendMessage(message) {
+      const output = document.getElementById('output');
+      const p = document.createElement('p');
+      p.textContent = message;
+      output.appendChild(p);
+      output.scrollTop = output.scrollHeight;
     }
 
-    // Отправка сообщения
-    document.getElementById("send-message-btn").addEventListener("click", async () => {
-      const chatList = document.getElementById("chat-list");
-      if (!chatList.value) {
-        alert("Выберите чат");
-        return;
-      }
-      const chatId = chatList.value;
-      const text = document.getElementById("message-text").value;
-      const payload = { chat_id: parseInt(chatId), sender_id: parseInt(currentUserId), text };
-      const response = await fetch(`${API_URL}/chat/${chatId}/message`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer " + accessToken
-        },
-        body: JSON.stringify(payload)
-      });
-      const result = await response.json();
-      document.getElementById("send-message-result").innerText = response.ok ? "Сообщение отправлено" : JSON.stringify(result);
-      loadHistory(chatId);
-    });
+    // Функция логина и установки WebSocket соединения
+    async function loginAndConnect() {
+      try {
+        // Отправляем запрос на логин
+        const loginResponse = await fetch('http://localhost:8000/auth/login', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            email: "string",
+            password: "string"
+          })
+        });
 
-    // Загрузка истории сообщений для выбранного чата
-    document.getElementById("load-history-btn").addEventListener("click", () => {
-      const chatList = document.getElementById("chat-list");
-      if (!chatList.value) {
-        alert("Выберите чат");
-        return;
-      }
-      loadHistory(chatList.value);
-    });
-    async function loadHistory(chatId) {
-      const response = await fetch(`${API_URL}/chat/${chatId}/messages`, {
-        headers: { "Authorization": "Bearer " + accessToken }
-      });
-      const messages = await response.json();
-      const messagesDiv = document.getElementById("messages");
-      messagesDiv.innerHTML = "";
-      messages.forEach(msg => {
-        const p = document.createElement("p");
-        p.innerText = `[${msg.timestamp}] Пользователь ${msg.sender_id}: ${msg.text}`;
-        messagesDiv.appendChild(p);
-      });
-    }
-
-    // Инициализация WebSocket для получения уведомлений
-    let ws;
-    function initWebSocket() {
-      ws = new WebSocket(`${API_URL.replace("http", "ws")}/ws?token=${accessToken}`);
-      ws.onopen = () => console.log("WebSocket соединение установлено");
-      ws.onmessage = (event) => {
-        console.log("Новое уведомление:", event.data);
-        alert("Уведомление: " + event.data);
-        // При получении уведомления можно обновить историю сообщений выбранного чата
-        const chatList = document.getElementById("chat-list");
-        if (chatList.value) {
-          loadHistory(chatList.value);
+        if (!loginResponse.ok) {
+          throw new Error('Login failed: ' + loginResponse.statusText);
         }
-      };
-      ws.onclose = () => console.log("WebSocket соединение закрыто");
+
+        const loginData = await loginResponse.json();
+        const token = loginData.access_token;
+        appendMessage("Logged in. Token received.");
+
+        // Устанавливаем WebSocket соединение, передавая токен в query-параметре
+        const wsUrl = `ws://localhost:8000/ws/notif?token=${token}`;
+        const socket = new WebSocket(wsUrl);
+
+        socket.onopen = function() {
+          appendMessage("WebSocket connected.");
+        };
+
+        socket.onmessage = function(event) {
+          appendMessage("Notification: " + event.data);
+        };
+
+        socket.onerror = function(event) {
+          appendMessage("WebSocket error occurred.");
+          console.error("WebSocket error:", event);
+        };
+
+        socket.onclose = function() {
+          appendMessage("WebSocket disconnected.");
+        };
+
+      } catch (error) {
+        appendMessage("Error: " + error.message);
+        console.error("Error:", error);
+      }
     }
+
+    // Запускаем логин и подключение при загрузке страницы
+    window.onload = loginAndConnect;
   </script>
 </body>
 </html>
