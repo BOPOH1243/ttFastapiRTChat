@@ -1,52 +1,103 @@
-# File: app/api/chat.py
-from fastapi import APIRouter, Depends, HTTPException
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import APIRouter, Depends, HTTPException, status, Body
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing import List
+from app.schemas.chat import Chat, ChatCreate, ChatUpdate
+from app.crud.chat import crud_chat
 from app.core.database import get_db
-from app.core.security import verify_token
-from app.schemas.chat import ChatBase, ChatResponse
-from app.schemas.message import MessageCreate, MessageResponse
-from app.crud.chat import create_chat, get_user_chats
-from app.crud.message import create_message, get_messages
-from app.crud.group import remove_user_from_group
+from app.core.security import get_current_user
+from app.models.chat import Chat as ChatModel
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
-
-async def get_current_user(token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)) -> int:
-    payload = verify_token(token)
-    if payload is None:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    return int(payload.get("sub"))
-
-@router.post("/", response_model=ChatResponse)
-async def create_new_chat(chat: ChatBase, current_user: int = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    new_chat = await create_chat(db, chat)
-    return new_chat
-
-@router.get("/my", response_model=list[ChatResponse])
-async def get_my_chats(current_user: int = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    chats = await get_user_chats(db, current_user)
+@router.get("/", response_model=List[Chat])
+async def read_chats(
+    skip: int = 0,
+    limit: int = 100,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Возвращает список чатов с пагинацией.
+    """
+    chats = await crud_chat.get_multi(db, skip=skip, limit=limit)
+    # Преобразование участников в список идентификаторов для ответа.
+    for chat in chats:
+        chat.participant_ids = [user.id for user in chat.participants] if chat.participants else []
     return chats
 
-@router.get("/{chat_id}/messages", response_model=list[MessageResponse])
-async def get_chat_messages(chat_id: int, limit: int = 50, offset: int = 0, current_user: int = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    messages = await get_messages(db, chat_id, limit, offset)
-    return messages
 
-@router.post("/{chat_id}/message", response_model=MessageResponse)
-async def send_message(chat_id: int, message: MessageCreate, current_user: int = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    if message.sender_id != current_user:
-        raise HTTPException(status_code=403, detail="Sender mismatch")
-    created_message = await create_message(db, message)
-    if not created_message:
-        raise HTTPException(status_code=400, detail="Duplicate message")
-    return created_message
+@router.get("/{chat_id}", response_model=Chat)
+async def read_chat(
+    chat_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Возвращает данные конкретного чата по идентификатору.
+    """
+    db_chat = await crud_chat.get(db, chat_id)
+    if not db_chat:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
+    db_chat.participant_ids = [user.id for user in db_chat.participants] if db_chat.participants else []
+    return db_chat
 
-@router.delete("/{chat_id}/user/{user_id}")
-async def remove_user(chat_id: int, user_id: int, current_user: int = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    result = await remove_user_from_group(db, chat_id, user_id)
-    if not result:
-        raise HTTPException(status_code=400, detail="Unable to remove user")
-    return {"detail": "User removed from chat"}
+
+@router.post("/", response_model=Chat, status_code=status.HTTP_201_CREATED)
+async def create_chat(
+    chat_create: ChatCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Создаёт новый чат.
+    
+    Поле `creator_id` автоматически заполняется из токена.
+    """
+    chat_data = chat_create.dict()
+    new_chat = await crud_chat.create(db, chat_data, current_user)
+    new_chat.participant_ids = [user.id for user in new_chat.participants] if new_chat.participants else []
+    return new_chat
+
+
+@router.patch("/{chat_id}", response_model=Chat)
+async def update_chat(
+    chat_id: int,
+    chat_update: ChatUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Обновляет данные чата.
+    
+    Обновление доступно только для создателя чата.
+    """
+    db_chat = await crud_chat.get(db, chat_id)
+    if not db_chat:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
+    if db_chat.creator_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to update this chat")
+    
+    updated_chat = await crud_chat.update(db, db_chat, chat_update.dict(exclude_unset=True))
+    updated_chat.participant_ids = [user.id for user in updated_chat.participants] if updated_chat.participants else []
+    return updated_chat
+
+
+
+@router.delete("/{chat_id}", response_model=Chat)
+async def delete_chat(
+    chat_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Удаляет чат.
+    
+    Удаление доступно только для создателя чата.
+    """
+    db_chat = await crud_chat.get(db, chat_id)
+    if not db_chat:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
+    if db_chat.creator_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized to delete this chat")
+    
+    deleted_chat = await crud_chat.remove(db, db_chat)
+    deleted_chat.participant_ids = [user.id for user in deleted_chat.participants] if deleted_chat.participants else []
+    return deleted_chat
