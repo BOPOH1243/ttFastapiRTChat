@@ -10,10 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.crud.user import crud_user
 from app.core.database import get_db
 from app.schemas.auth import TokenData
-
+from app.core.config import settings
 # В реальном проекте SECRET_KEY следует задавать через переменные окружения
-SECRET_KEY = "supersecretkey"
-ALGORITHM = "HS256"
+SECRET_KEY = settings.SECRET_KEY
+ALGORITHM = settings.ALGORITHM
 # Устанавливаем длительный срок жизни токена (например, 7 дней)
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7
 
