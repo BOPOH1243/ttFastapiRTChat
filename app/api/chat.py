@@ -53,7 +53,6 @@ async def create_chat(
     """
     chat_data = chat_create.dict()
     new_chat = await crud_chat.create(db, chat_data, current_user)
-    new_chat.participant_ids = [user.id for user in new_chat.participants] if new_chat.participants else []
     return new_chat
 
 

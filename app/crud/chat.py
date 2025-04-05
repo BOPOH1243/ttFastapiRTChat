@@ -5,6 +5,8 @@ from sqlalchemy.orm import selectinload
 from app.models.chat import Chat, chat_users
 from app.models.user import User
 from app.services.chat_service import manager
+from app.schemas.chat import Chat as ChatSchema
+from fastapi.encoders import jsonable_encoder
 
 class CRUDChat:
     """Класс для операций CRUD над чатами."""
@@ -59,9 +61,17 @@ class CRUDChat:
         await db.commit()
         # Принудительно обновляем объект, чтобы избежать ленивой загрузки
         await db.refresh(new_chat, attribute_names=["participants"])
-        
+        new_chat.participant_ids = [user.id for user in new_chat.participants] if new_chat.participants else []
+        payload = ChatSchema.from_orm(new_chat)
+        payload_dict = jsonable_encoder(payload)
         for participant in new_chat.participants:
-            await manager.send_notification(participant.id, message={"type":"new_chat"})
+            await manager.send_notification(
+                user_id=participant.id,
+                message={
+                    "type": "new_chat",
+                    "payload": payload_dict
+                    }
+                )
         return new_chat
 
     async def update(self, db: AsyncSession, db_chat: Chat, update_data: dict) -> Chat:
@@ -86,6 +96,17 @@ class CRUDChat:
         await db.commit()
         # Принудительно обновляем объект с участниками
         await db.refresh(db_chat, attribute_names=["participants"])
+        db_chat.participant_ids = [user.id for user in db_chat.participants] if db_chat.participants else []
+        payload = ChatSchema.from_orm(db_chat)
+        payload_dict = jsonable_encoder(payload)
+        for participant in db_chat.participants:
+            await manager.send_notification(
+                user_id=participant.id,
+                message={
+                    "type": "update_chat",
+                    "payload": payload_dict
+                    }
+                )
         return db_chat
 
     async def remove(self, db: AsyncSession, db_chat: Chat) -> Chat:
